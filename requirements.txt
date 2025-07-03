@@ -3,3 +3,4 @@ requests
 grpcio
 protobuf
 python-dotenv
+nvidia-riva-client
