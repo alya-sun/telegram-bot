@@ -57,17 +57,17 @@ async def voice_or_video_handler(update: Update, context: ContextTypes.DEFAULT_T
     try:
         text = transcribe_with_huggingface(audio_path)
     except Exception as e:
-        await update.message.reply_text("Не удалось распознать аудио")
+        await message.reply_text("Не удалось распознать аудио")
         print(e)
         return
 
-    await update.message.reply_text(f"🗣️ Распознанный текст: {text}")
+    await message.reply_text(f"🗣️ Распознанный текст: {text}")
 
     try:
         answer = generate_response(text)
-        await update.message.reply_text(f"🤖 {answer}")
+        await message.reply_text(f"🤖 {answer}")
     except Exception as e:
-        await update.message.reply_text("Ошибка при генерации ответа")
+        await message.reply_text("Ошибка при генерации ответа")
         print(e)
 
 def main():
