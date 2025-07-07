@@ -1,41 +1,28 @@
 import requests
-import subprocess
-import sys
 import os
-import re
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
 
-sys.stdout.reconfigure(encoding='utf-8')
 load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
+
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+HEADERS_HF = {"Authorization": f"Bearer {HF_TOKEN}"}
 
-def run_whisper(audio_path):
-    cmd = [
-        "python", "python-clients/scripts/asr/transcribe_file_offline.py",
-        "--server", "grpc.nvcf.nvidia.com:443",
-        "--use-ssl",
-        "--metadata", "function-id", "b702f636-f60c-4a3d-a6f4-f3568c13bd7d",
-        "--metadata", "authorization", f"Bearer {API_KEY}",
-        "--language-code", "multi",
-        "--input-file", audio_path
-    ]
-
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
-
-    if result.returncode != 0:
-        print("⚠️ Ошибка:", result.stderr)
-        return None
-    return result.stdout.strip()
-
-
-def extract_transcript(raw_output):
-    match = re.search(r'transcript:\s*"(.+?)"', raw_output)
-    return match.group(1).strip() if match else None
+def transcribe_with_huggingface(audio_path):
+    url = "https://router.huggingface.co/hf-inference/models/openai/whisper-large-v3"
+    response = requests.post(
+        url,
+        headers={"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "audio/ogg"},
+        data=open(audio_path, "rb").read()
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data.get("text")
 
 def generate_response(prompt):
     url = "https://integrate.api.nvidia.com/v1/chat/completions"
@@ -56,13 +43,14 @@ def generate_response(prompt):
 async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     voice = update.message.voice
     file = await context.bot.get_file(voice.file_id)
-    ogg_path = f"audio.ogg"
-    await file.download_to_drive(ogg_path)
+    audio_path = f"audio.ogg"
+    await file.download_to_drive(audio_path)
 
-    raw_output = run_whisper(ogg_path)
-    text = extract_transcript(raw_output)
-    if not text:
-        await update.message.reply_text("😕 Не удалось распознать аудио.")
+    try:
+        text = transcribe_with_huggingface(audio_path)
+    except Exception as e:
+        await update.message.reply_text("Не удалось распознать аудио")
+        print(e)
         return
 
     await update.message.reply_text(f"🗣️ Распознанный текст: {text}")
@@ -71,7 +59,7 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer = generate_response(text)
         await update.message.reply_text(f"🤖 {answer}")
     except Exception as e:
-        await update.message.reply_text("⚠️ Ошибка при генерации ответа.")
+        await update.message.reply_text("Ошибка при генерации ответа")
         print(e)
 
 def main():
@@ -82,5 +70,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.stdout.reconfigure(encoding='utf-8')
     main()
