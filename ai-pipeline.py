@@ -40,9 +40,17 @@ def generate_response(prompt):
     output = response.json()
     return output["choices"][0]["message"]["content"]
 
-async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    voice = update.message.voice
-    file = await context.bot.get_file(voice.file_id)
+async def voice_or_video_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+
+    if message.voice:
+        file = await context.bot.get_file(message.voice.file_id)
+    elif message.video_note:
+        file = await context.bot.get_file(message.video_note.file_id)
+    else:
+        await message.reply_text("Неподдерживаемый тип сообщения")
+        return
+
     audio_path = f"audio.ogg"
     await file.download_to_drive(audio_path)
 
@@ -64,7 +72,7 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.VOICE, voice_handler))
+    app.add_handler(MessageHandler(filters.VOICE | filters.VIDEO_NOTE, voice_or_video_handler))
     print("🤖 Бот запущен")
     app.run_polling()
 
